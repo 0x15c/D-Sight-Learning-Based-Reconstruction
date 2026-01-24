@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -57,11 +58,51 @@ class UNet2D(nn.Module):
         return self.grad_head(dec1)
 
 
-class VoxelMorph2D(nn.Module):
+class Gradient2D(nn.Module):
     def __init__(self, in_channels=2, base_channels=16):
         super().__init__()
         self.unet = UNet2D(in_channels=in_channels, base_channels=base_channels)
 
     def forward(self, img_RGB):
         grad = self.unet(img_RGB)
+        # returning [H x W x 2] tensor
         return grad
+    
+class Depth_Reconstruction(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.grad = Gradient2D()
+    def forward(self, img_RGB):
+        grad = self.grad(img_RGB)
+        z = getDepth(grad)
+        return z
+
+def getDepth(grad_hw2: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+    assert grad_hw2.ndim == 3 and grad_hw2.shape[-1] == 2
+    H, W, _ = grad_hw2.shape
+    device = grad_hw2.device
+    dtype = grad_hw2.dtype
+
+    p = grad_hw2[..., 0]
+    q = grad_hw2[..., 1]
+
+    P = torch.fft.fft2(p)
+    Q = torch.fft.fft2(q)
+
+    # frequencies in radians per pixel (periodic)
+    kx = 2.0 * math.pi * torch.fft.fftfreq(W, d=1.0, device=device).to(dtype)  # (W,)
+    ky = 2.0 * math.pi * torch.fft.fftfreq(H, d=1.0, device=device).to(dtype)  # (H,)
+    KX, KY = torch.meshgrid(kx, ky, indexing="xy")  # (W,H) in xy indexing
+
+    # make to (H,W)
+    KX = KX.T
+    KY = KY.T
+
+    denom = (KX**2 + KY**2)
+    denom[0, 0] = 1.0
+
+    Z = (1j * KX * P + 1j * KY * Q) / (denom + eps)
+    Z[0, 0] = 0.0 + 0.0j
+
+    z = torch.fft.ifft2(Z).real
+    return z
