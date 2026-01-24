@@ -1,1 +1,9 @@
 video/*
+circle_detection_dataset/*
+export_frames/*
+dataset_reconstruction/*
+*.mp4
+*.jpg
+*.png
+*.json
+*.yaml
