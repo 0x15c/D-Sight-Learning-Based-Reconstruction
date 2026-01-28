@@ -6,12 +6,12 @@ from ultralytics import YOLO
 
 # ---- config ----
 MODEL_PATH = "./circle_detection_dataset/runs/detect/train4/weights/best.pt"
-INPUT_VIDEO = "video/calib2.mp4"      # or 0 for webcam
+INPUT_VIDEO = "video/calib2_cropped.mp4"      # or 0 for webcam
 OUT_DIR = "export_frames"
-OUT_JSON = os.path.join(OUT_DIR, "circles.json")
+OUT_JSON = os.path.join(OUT_DIR, "balls.json")
 
 CONF_THRES = 0.25
-IOU_THRES = 0.5
+IOU_THRES = 0.9
 
 MAX_EXPORT = 200
 RANDOM_SEED = 0  # change for different random selection, or set None for non-deterministic
