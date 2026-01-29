@@ -21,7 +21,7 @@ VAL_SPLIT = 0.2
 SEED = 42
 EPOCHS = 100
 BATCH_SIZE = 4
-LR = 1e-3
+LR = 1e-4
 BASE_CHANNELS = 16
 MAX_SAMPLES = None
 RESIZE_H = None
@@ -32,6 +32,8 @@ PREVIEW = True
 PREVIEW_EVERY_EPOCH = 1
 CHECKPOINT_DIR = "checkpoints"
 CHECKPOINT_EVERY = 10
+USE_GRAD_LOSS = True
+USE_DEPTH_LOSS = False
 # ------------------------
 
 
@@ -198,13 +200,15 @@ def preview_validation(
     imgs: torch.Tensor,
     pred_grad: torch.Tensor,
     gt_height: torch.Tensor,
-    # window_prefix: str = "val",
+    pred_height: torch.Tensor,
+    sample_idx: int,
 ) -> None:
-    # cv2.destroyAllWindows()
+    cv2.destroyAllWindows()
     # Show only the first sample in batch to keep UI responsive.
-    img = imgs[0].detach().cpu().numpy()  # (3, H, W)
-    grad = pred_grad[0].detach().cpu().numpy()  # (2, H, W)
-    gt = gt_height[0].detach().cpu().numpy()  # (H, W)
+    img = imgs[sample_idx].detach().cpu().numpy()  # (3, H, W)
+    grad = pred_grad[sample_idx].detach().cpu().numpy()  # (2, H, W)
+    gt = gt_height[sample_idx].detach().cpu().numpy()  # (H, W)
+    pred_z = pred_height[sample_idx].detach().cpu().numpy()  # (H, W)
 
     img = np.clip(img * 255.0, 0, 255).astype(np.uint8)
     img = np.transpose(img, (1, 2, 0))
@@ -220,6 +224,9 @@ def preview_validation(
     gt_height_vis = _normalize_to_uint8(gt, symmetric=False)
     gt_height_vis = cv2.applyColorMap(gt_height_vis, cv2.COLORMAP_TURBO)
 
+    pred_height_vis = _normalize_to_uint8(pred_z, symmetric=False)
+    pred_height_vis = cv2.applyColorMap(pred_height_vis, cv2.COLORMAP_TURBO)
+
     gt_grad = height_to_grad(torch.from_numpy(gt[None, ...])).numpy()[0]
     gt_grad_x = gt_grad[0]
     gt_grad_y = gt_grad[1]
@@ -229,6 +236,7 @@ def preview_validation(
 
     cv2.imshow("input", img_bgr)
     cv2.imshow("pred_grad (B=x, R=y)", grad_vis)
+    cv2.imshow("pred_height", pred_height_vis)
     cv2.imshow("gt_height", gt_height_vis)
     cv2.imshow("gt_grad (B=x, R=y)", gt_grad_vis)
     cv2.waitKey(1)
@@ -250,8 +258,13 @@ def train_one_epoch(
 
         optimizer.zero_grad(set_to_none=True)
         grad = net(imgs)
+        loss = 0.0
+        # if USE_GRAD_LOSS:
+        gt_grad = height_to_grad(gt)
+        loss = loss + mse(grad, gt_grad)
+        # if USE_DEPTH_LOSS:
         depth = integrate_depth_batch(grad)
-        loss = mse(zero_mean(depth), zero_mean(gt))
+        loss = loss + mse(zero_mean(depth), zero_mean(gt))
         loss.backward()
         optimizer.step()
 
@@ -272,17 +285,26 @@ def eval_one_epoch(
     running = 0.0
     count = 0
     shown = False
-    for imgs, gt in loader:
+    rng = np.random.default_rng(SEED + epoch)
+    target_batch = int(rng.integers(0, max(len(loader), 1)))
+    for batch_idx, (imgs, gt) in enumerate(loader):
         imgs = imgs.to(device)
         gt = gt.to(device)
         grad = net(imgs)
-        depth = integrate_depth_batch(grad)
-        loss = mse(zero_mean(depth), zero_mean(gt))
+        loss = 0.0
+        if USE_GRAD_LOSS:
+            gt_grad = height_to_grad(gt)
+            loss = loss + mse(grad, gt_grad)
+        if USE_DEPTH_LOSS:
+            depth = integrate_depth_batch(grad)
+            loss = loss + mse(zero_mean(depth), zero_mean(gt))
         running += loss.item() * imgs.shape[0]
         count += imgs.shape[0]
 
-        if PREVIEW and not shown and (epoch % PREVIEW_EVERY_EPOCH == 0):
-            preview_validation(imgs, grad, gt)
+        if PREVIEW and not shown and (epoch % PREVIEW_EVERY_EPOCH == 0) and (batch_idx == target_batch):
+            sample_idx = int(rng.integers(0, imgs.shape[0]))
+            pred_height = integrate_depth_batch(grad)
+            preview_validation(imgs, grad, gt, pred_height, sample_idx)
             shown = True
     return running / max(count, 1)
 
