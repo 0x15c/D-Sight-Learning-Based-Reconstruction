@@ -13,7 +13,7 @@ OUT_JSON = os.path.join(OUT_DIR, "balls.json")
 CONF_THRES = 0.25
 IOU_THRES = 0.9
 
-MAX_EXPORT = 200
+MAX_EXPORT = 1000
 RANDOM_SEED = 0  # change for different random selection, or set None for non-deterministic
 # ---------------
 

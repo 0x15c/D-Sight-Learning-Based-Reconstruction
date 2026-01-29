@@ -4,6 +4,7 @@ import time
 import cv2
 import numpy as np
 import torch
+from typing import Optional, Tuple
 
 import model
 
@@ -17,6 +18,7 @@ RESIZE_H = None
 RESIZE_W = None
 DISPLAY_SCALE = 1.0
 WINDOW_NAME = "pred_height"
+BACKGROUND_PATH = "export_frames/background.png"
 # ------------------------
 
 
@@ -39,6 +41,18 @@ def load_model(device: torch.device) -> torch.nn.Module:
     return net
 
 
+def load_background(path: Optional[str], resize_hw: Optional[Tuple[int, int]]) -> Optional[np.ndarray]:
+    if not path:
+        return None
+    bg_bgr = cv2.imread(path, cv2.IMREAD_COLOR)
+    if bg_bgr is None:
+        raise RuntimeError(f"Could not read background image: {path}")
+    bg_rgb = cv2.cvtColor(bg_bgr, cv2.COLOR_BGR2RGB)
+    if resize_hw is not None:
+        bg_rgb = cv2.resize(bg_rgb, (resize_hw[1], resize_hw[0]), interpolation=cv2.INTER_AREA)
+    return bg_rgb.astype(np.float32) / 255.0
+
+
 def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = load_model(device)
@@ -46,6 +60,11 @@ def main() -> None:
     cap = cv2.VideoCapture(VIDEO_PATH)
     if not cap.isOpened():
         raise RuntimeError(f"Could not open video: {VIDEO_PATH}")
+
+    resize_hw = None
+    if RESIZE_H is not None and RESIZE_W is not None:
+        resize_hw = (RESIZE_H, RESIZE_W)
+    background_rgb = load_background(BACKGROUND_PATH, resize_hw)
 
     writer = None
     prev_time = time.perf_counter()
@@ -60,8 +79,11 @@ def main() -> None:
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         if RESIZE_H is not None and RESIZE_W is not None:
             frame_rgb = cv2.resize(frame_rgb, (RESIZE_W, RESIZE_H), interpolation=cv2.INTER_AREA)
+        frame_rgb = frame_rgb.astype(np.float32) / 255.0
+        if background_rgb is not None:
+            frame_rgb = frame_rgb - background_rgb
 
-        img = torch.from_numpy(frame_rgb).float() / 255.0
+        img = torch.from_numpy(frame_rgb).float()
         img = img.permute(2, 0, 1).unsqueeze(0).contiguous().to(device)
 
         with torch.no_grad():

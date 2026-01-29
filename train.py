@@ -33,7 +33,9 @@ PREVIEW_EVERY_EPOCH = 1
 CHECKPOINT_DIR = "checkpoints"
 CHECKPOINT_EVERY = 10
 USE_GRAD_LOSS = True
-USE_DEPTH_LOSS = False
+USE_DEPTH_LOSS = True
+BACKGROUND_PATH = "export_frames/background.png"
+GRAD_LOSS_GAIN = 100
 # ------------------------
 
 
@@ -91,6 +93,7 @@ def load_dataset_to_memory(
     seed: int,
     max_samples: Optional[int],
     resize_hw: Optional[Tuple[int, int]],
+    background_rgb: Optional[np.ndarray],
 ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
     frames = load_annotations(json_path)
     keys = sorted(frames.keys())
@@ -114,11 +117,15 @@ def load_dataset_to_memory(
 
         if resize_hw is not None:
             img_rgb = cv2.resize(img_rgb, (resize_hw[1], resize_hw[0]), interpolation=cv2.INTER_AREA)
+        if background_rgb is not None:
+            img_rgb = img_rgb.astype(np.float32) / 255.0 - background_rgb
+        else:
+            img_rgb = img_rgb.astype(np.float32) / 255.0
 
         h, w, _ = img_rgb.shape
         gt = build_height_map(circle, h, w, ball_radius_mm, mm_per_px)
 
-        img_tensor = torch.from_numpy(img_rgb).float() / 255.0
+        img_tensor = torch.from_numpy(img_rgb).float()
         img_tensor = img_tensor.permute(2, 0, 1).contiguous()
         images.append(img_tensor)
         heights.append(gt)
@@ -242,15 +249,29 @@ def preview_validation(
     cv2.waitKey(1)
 
 
+def load_background(path: Optional[str], resize_hw: Optional[Tuple[int, int]]) -> Optional[np.ndarray]:
+    if not path:
+        return None
+    bg_bgr = cv2.imread(path, cv2.IMREAD_COLOR)
+    if bg_bgr is None:
+        raise RuntimeError(f"Could not read background image: {path}")
+    bg_rgb = cv2.cvtColor(bg_bgr, cv2.COLOR_BGR2RGB)
+    if resize_hw is not None:
+        bg_rgb = cv2.resize(bg_rgb, (resize_hw[1], resize_hw[0]), interpolation=cv2.INTER_AREA)
+    return bg_rgb.astype(np.float32) / 255.0
+
+
 def train_one_epoch(
     net: nn.Module,
     loader: DataLoader,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-) -> float:
+) -> Tuple[float, float, float]:
     net.train()
     mse = nn.MSELoss()
     running = 0.0
+    running_grad = 0.0
+    running_depth = 0.0
     count = 0
     for imgs, gt in loader:
         imgs = imgs.to(device)
@@ -259,18 +280,25 @@ def train_one_epoch(
         optimizer.zero_grad(set_to_none=True)
         grad = net(imgs)
         loss = 0.0
-        # if USE_GRAD_LOSS:
-        gt_grad = height_to_grad(gt)
-        loss = loss + mse(grad, gt_grad)
-        # if USE_DEPTH_LOSS:
-        depth = integrate_depth_batch(grad)
-        loss = loss + mse(zero_mean(depth), zero_mean(gt))
+        grad_loss = torch.tensor(0.0, device=device)
+        depth_loss = torch.tensor(0.0, device=device)
+        if USE_GRAD_LOSS:
+            gt_grad = height_to_grad(gt)
+            grad_loss = mse(grad, gt_grad)
+            loss = loss + GRAD_LOSS_GAIN * grad_loss
+        if USE_DEPTH_LOSS:
+            depth = integrate_depth_batch(grad)
+            depth_loss = mse(zero_mean(depth), zero_mean(gt))
+            loss = loss + depth_loss
         loss.backward()
         optimizer.step()
 
         running += loss.item() * imgs.shape[0]
+        running_grad += grad_loss.item() * imgs.shape[0]
+        running_depth += depth_loss.item() * imgs.shape[0]
         count += imgs.shape[0]
-    return running / max(count, 1)
+    denom = max(count, 1)
+    return running / denom, running_grad / denom, running_depth / denom
 
 
 @torch.no_grad()
@@ -279,10 +307,12 @@ def eval_one_epoch(
     loader: DataLoader,
     device: torch.device,
     epoch: int,
-) -> float:
+) -> Tuple[float, float, float]:
     net.eval()
     mse = nn.MSELoss()
     running = 0.0
+    running_grad = 0.0
+    running_depth = 0.0
     count = 0
     shown = False
     rng = np.random.default_rng(SEED + epoch)
@@ -292,13 +322,19 @@ def eval_one_epoch(
         gt = gt.to(device)
         grad = net(imgs)
         loss = 0.0
+        grad_loss = torch.tensor(0.0, device=device)
+        depth_loss = torch.tensor(0.0, device=device)
         if USE_GRAD_LOSS:
             gt_grad = height_to_grad(gt)
-            loss = loss + mse(grad, gt_grad)
+            grad_loss = mse(grad, gt_grad)
+            loss = loss + grad_loss
         if USE_DEPTH_LOSS:
             depth = integrate_depth_batch(grad)
-            loss = loss + mse(zero_mean(depth), zero_mean(gt))
+            depth_loss = mse(zero_mean(depth), zero_mean(gt))
+            loss = loss + depth_loss
         running += loss.item() * imgs.shape[0]
+        running_grad += grad_loss.item() * imgs.shape[0]
+        running_depth += depth_loss.item() * imgs.shape[0]
         count += imgs.shape[0]
 
         if PREVIEW and not shown and (epoch % PREVIEW_EVERY_EPOCH == 0) and (batch_idx == target_batch):
@@ -306,7 +342,8 @@ def eval_one_epoch(
             pred_height = integrate_depth_batch(grad)
             preview_validation(imgs, grad, gt, pred_height, sample_idx)
             shown = True
-    return running / max(count, 1)
+    denom = max(count, 1)
+    return running / denom, running_grad / denom, running_depth / denom
 
 
 def main() -> None:
@@ -319,6 +356,8 @@ def main() -> None:
     if RESIZE_H is not None and RESIZE_W is not None:
         resize_hw = (RESIZE_H, RESIZE_W)
 
+    background_rgb = load_background(BACKGROUND_PATH, resize_hw)
+
     (train_imgs, train_gts), (val_imgs, val_gts) = load_dataset_to_memory(
         image_dir=IMAGE_DIR,
         json_path=JSON_PATH,
@@ -328,6 +367,7 @@ def main() -> None:
         seed=SEED,
         max_samples=MAX_SAMPLES,
         resize_hw=resize_hw,
+        background_rgb=background_rgb,
     )
 
     wandb.init(
@@ -347,6 +387,9 @@ def main() -> None:
             "max_samples": MAX_SAMPLES,
             "resize_h": RESIZE_H,
             "resize_w": RESIZE_W,
+            "background_path": BACKGROUND_PATH,
+            "use_grad_loss": USE_GRAD_LOSS,
+            "use_depth_loss": USE_DEPTH_LOSS,
         },
     )
 
@@ -360,10 +403,25 @@ def main() -> None:
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
 
     for epoch in range(1, EPOCHS + 1):
-        train_loss = train_one_epoch(net, train_loader, optimizer, device)
-        val_loss = eval_one_epoch(net, val_loader, device, epoch)
-        wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
-        print(f"Epoch {epoch:03d} | train_loss={train_loss:.6f} | val_loss={val_loss:.6f}")
+        train_loss, train_grad_loss, train_depth_loss = train_one_epoch(
+            net, train_loader, optimizer, device
+        )
+        val_loss, val_grad_loss, val_depth_loss = eval_one_epoch(net, val_loader, device, epoch)
+        wandb.log(
+            {
+                "epoch": epoch,
+                "train_loss": train_loss,
+                "train_grad_loss": train_grad_loss,
+                "train_depth_loss": train_depth_loss,
+                "val_loss": val_loss,
+                "val_grad_loss": val_grad_loss,
+                "val_depth_loss": val_depth_loss,
+            }
+        )
+        print(
+            f"Epoch {epoch:03d} | train_loss={train_loss:.6f} (g={train_grad_loss:.6f}, d={train_depth_loss:.6f})"
+            f" | val_loss={val_loss:.6f} (g={val_grad_loss:.6f}, d={val_depth_loss:.6f})"
+        )
         if CHECKPOINT_EVERY and (epoch % CHECKPOINT_EVERY == 0):
             os.makedirs(CHECKPOINT_DIR, exist_ok=True)
             ckpt_path = os.path.join(CHECKPOINT_DIR, f"epoch_{epoch:03d}.pt")
