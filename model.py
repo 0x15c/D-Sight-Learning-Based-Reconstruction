@@ -83,11 +83,8 @@ def getDepth(grad_hw2: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
     # frequencies in radians per pixel (periodic)
     kx = 2.0 * math.pi * torch.fft.fftfreq(W, d=1.0, device=device).to(dtype)  # (W,)
     ky = 2.0 * math.pi * torch.fft.fftfreq(H, d=1.0, device=device).to(dtype)  # (H,)
-    KX, KY = torch.meshgrid(kx, ky, indexing="xy")  # (W,H) in xy indexing
-
-    # make to (H,W)
-    KX = KX.T
-    KY = KY.T
+    # Use ij-style grid to match (H, W) without transpose; works across torch versions.
+    KY, KX = torch.meshgrid(ky, kx)
 
     denom = (KX**2 + KY**2)
     denom[0, 0] = 1.0
