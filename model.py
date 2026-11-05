@@ -1,7 +1,7 @@
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from poisson_solver import PoissonSolver
 # trying to employ U-Net to predict a gradient map
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -59,47 +59,29 @@ class UNet2D(nn.Module):
 
 
 class Gradient2D(nn.Module):
-    def __init__(self, in_channels=2, base_channels=16):
+    def __init__(self, in_channels=3, base_channels=16):
         super().__init__()
         self.unet = UNet2D(in_channels=in_channels, base_channels=base_channels)
 
     def forward(self, img_RGB):
         grad = self.unet(img_RGB)
-        # returning [H x W x 2] tensor
+        # B x 2 x H x W: forward differences along x, then y.
         return grad
 
-def getDepth(grad_hw2: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
-    assert grad_hw2.ndim == 3 and grad_hw2.shape[-1] == 2
-    H, W, _ = grad_hw2.shape
-    device = grad_hw2.device
-    dtype = grad_hw2.dtype
-
-    p = grad_hw2[..., 0]
-    q = grad_hw2[..., 1]
-
-    P = torch.fft.fft2(p)
-    Q = torch.fft.fft2(q)
-
-    # frequencies in radians per pixel (periodic)
-    kx = 2.0 * math.pi * torch.fft.fftfreq(W, d=1.0, device=device).to(dtype)  # (W,)
-    ky = 2.0 * math.pi * torch.fft.fftfreq(H, d=1.0, device=device).to(dtype)  # (H,)
-    # Use ij-style grid to match (H, W) without transpose; works across torch versions.
-    KY, KX = torch.meshgrid(ky, kx)
-
-    denom = (KX**2 + KY**2)
-    denom[0, 0] = 1.0
-
-    Z = (1j * KX * P + 1j * KY * Q) / (denom + eps)
-    Z[0, 0] = 0.0 + 0.0j
-
-    z = torch.fft.ifft2(Z).real
-    return z
+def getDepth(grad_hw2: torch.Tensor, eps: float = 1e-12,
+             boundary="dirichlet", reference_region=None) -> torch.Tensor:
+    """Single-image compatibility helper; cache PoissonSolver in live loops."""
+    h, w, _ = grad_hw2.shape
+    solver = PoissonSolver(h, w, boundary=boundary, reference_region=reference_region).to(grad_hw2.device)
+    return solver(grad_hw2.permute(2, 0, 1).unsqueeze(0))[0]
 
 class Depth_Reconstruction(nn.Module):
-    def __init__(self):
+    def __init__(self, height=256, width=320, base_channels=16,
+                 boundary="dirichlet", reference_region=None):
         super().__init__()
-        self.grad = Gradient2D()
+        self.grad = Gradient2D(base_channels=base_channels)
+        self.solver = PoissonSolver(height, width, boundary=boundary, reference_region=reference_region)
     def forward(self, img_RGB):
         grad = self.grad(img_RGB)
-        z = getDepth(grad)
+        z = self.solver(grad)
         return z

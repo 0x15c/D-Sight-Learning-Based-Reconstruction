@@ -1,0 +1,83 @@
+{
+  // Physical sensor identity. Presets are starting points; tune each sensor independently.
+  "sensor": {
+    "name": "big",
+    "variant": "markerless"
+  },
+
+  // Crop is [left, top, width, height] in the FULL camera frame. null means full frame.
+  // Camera property units and auto-exposure values depend on the driver; DSHOW manual is usually 0.25.
+  // A null setting leaves the camera driver's current value unchanged.
+  "camera": {"index": 0, "backend": "DSHOW", "width": 1920, "height": 1080, "fps": 30, "settings": {"auto_exposure": 0.25, "exposure": -6.0, "brightness": 0.0, "contrast": 32.0, "gain": 0.0, "saturation": 60.0, "sharpness": 2.0, "gamma": 100.0, "auto_wb": 0.0, "white_balance_temperature": 4600.0}, "crop": [286, 0, 1292, 1080], "fourcc": "MJPG"},
+
+  // Measure mm_per_pixel in the native CROPPED image, before training resize.
+  // Ball diameter and scale below are examples: replace them with your measured values.
+  "calibration": {
+    "ball_diameter_mm": 7.0,
+    "mm_per_pixel": 0.0337962962962962962962962962963,
+    "annotation_count": 100,
+    "record_count": 2000,
+    "capture_interval_s": 0.25,
+    // YOLO checks run in the background. Only validated contact frames are saved.
+    "detection_fps": 10,
+    "release_delay_s": 0.6
+  },
+
+  // Relative paths resolve from the reconstruction project folder. Scripts fill checkpoint paths.
+  "paths": {
+    "annotation_images": "data/big/annotation/images",
+    "annotation_labels": "data/big/annotation/labels",
+    "recording_images": "data/big/recording",
+    "dataset": "data/big/dataset",
+    "background": "data/big/background.png",
+    "yolo_checkpoint": "D:\\Research_Project\\D_Sight\\D-Sight-Learning-Based-Reconstruction\\runs\\big\\detector\\20261105_003208_059733\\train\\weights\\best.pt",
+    "checkpoint": "D:/Research_Project/D_Sight/D-Sight-Learning-Based-Reconstruction/data/big/checkpoints/best_neumann.pt"
+  },
+
+  // One class: ball-contact footprint. Marked sensors start with a higher confidence threshold.
+  "yolo": {
+    "model": "yolo11n.pt",
+    "epochs": 100,
+    // null preserves native crop pixels; YOLO only adds stride-aligned padding.
+    "image_size": null,
+    "batch_size": 2,
+    "confidence": 0.5,
+    "validation_fraction": 0.2
+  },
+
+  // image_size null uses the original crop resolution. Depth and loss are in mm.
+  // RAM cache is bounded by cache_limit_gib; larger datasets stream from disk.
+  // The marker preset starts with a wider U-Net. Both presets remain editable.
+  "training": {
+    "image_size": null,
+    "base_channels": 16,
+    "batch_size": 1,
+    "epochs": 100,
+    "learning_rate": 0.0001,
+    "validation_fraction": 0.2,
+    "seed": 42,
+    "cache_limit_gib": 32,
+    "num_workers": 0,
+    "amp": true,
+    "gradient_loss_weight": 0.0,
+    "subtract_background": true
+  },
+
+  // Use predicted boundary slopes; do not force all edge heights to zero.
+  // Optional [left, top, width, height] reference patch in original cropped pixels.
+  // null sets only the mean perimeter height to zero, preserving tilt and shape.
+  // Training stores the solver and reference in the checkpoint for the demo.
+  "reconstruction": {
+    "boundary": "neumann",
+    "reference_region": null
+  },
+
+  // Enable pyvista for a live 3D point cloud; max_depth_mm fixes the heatmap color scale.
+  "demo": {
+    "pyvista": false,
+    "point_stride": 2,
+    "max_depth_mm": 1.0,
+    // null automatically shows signed heights for Neumann checkpoints.
+    "min_depth_mm": null
+  }
+}

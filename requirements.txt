@@ -1,0 +1,8 @@
+# Install a CUDA build of torch appropriate for your GPU before this file.
+torch>=2.3
+numpy>=1.26
+opencv-python>=4.9
+pillow>=10
+ultralytics>=8.3
+# Only required when demo.py/config enables the 3D point cloud.
+pyvista>=0.43

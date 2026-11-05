@@ -9,3 +9,9 @@ dataset_reconstruction/*
 *.yaml
 wandb/*
 checkpoints/
+data/
+runs/
+__pycache__/
+.pytest_cache/
+*.pyc
+tests/*
