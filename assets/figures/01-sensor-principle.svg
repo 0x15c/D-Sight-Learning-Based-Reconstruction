@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="desc">
+  <desc id="desc">带 xyz 坐标的弹性体立体示意。相机位于接触中心的竖直正下方，光轴沿 z 方向，虚线表示光轴与观察视野。红色光沿 y 方向，绿蓝光沿 x 方向相向入射。右图入射光平行于未形变弹性体表面，在倾斜接触面处反射向下方相机。</desc>
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#111"/></marker>
+    <marker id="r" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#c43c39"/></marker>
+    <marker id="g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#298347"/></marker>
+    <marker id="b" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#3268af"/></marker>
+  </defs>
+  <rect width="1200" height="600" fill="white"/>
+  <g font-family="Microsoft YaHei, Segoe UI, sans-serif" fill="#111" font-size="20">
+    <!-- A common parallel projection is used for the slab and camera body:
+         x down-right, y down-left, z vertical. The optical axis passes
+         through the slab centre (325,220), not its front corner (410,345). -->
+    <g stroke="#111" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M240 95L570 205L410 345L80 235Z"/>
+      <path d="M80 235V285L410 395L570 255V205M410 345V395"/>
+      <path d="M240 95V145M240 145L80 285M240 145L570 255" stroke="#888" stroke-dasharray="6 6"/>
+    </g>
+    <!-- A centred field of view on the underside, and the vertical optical axis. -->
+    <g fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="6 6" stroke-linejoin="round">
+      <path d="M290 210L440 260L360 330L210 280Z"/>
+      <path d="M290 210L325 452L440 260M360 330L325 452L210 280"/>
+      <path d="M325 224V452"/>
+    </g>
+    <g stroke="#111" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse cx="325" cy="220" rx="68" ry="33" stroke-dasharray="5 5"/>
+      <circle cx="325" cy="142" r="78" fill="white"/>
+      <path d="M257 180Q325 260 393 180"/>
+      <path d="M325 20V55" marker-end="url(#a)"/>
+      <path d="M435 90L383 186" stroke-width="1.5"/>
+      <!-- Camera body repeats the slab's projected x/y directions. -->
+      <path d="M315 475L355 488V528L335 545L295 532V492Z" fill="white"/>
+      <path d="M315 475L295 492L335 505L355 488M335 505V545"/>
+      <path d="M307 452V482Q325 495 343 482V452" fill="white"/>
+      <ellipse cx="325" cy="452" rx="18" ry="9" fill="white"/>
+      <path d="M75 403L135 423" marker-end="url(#a)"/>
+      <path d="M75 403L35 438" marker-end="url(#a)"/>
+      <path d="M75 403V333" marker-end="url(#a)"/>
+    </g>
+    <text x="368" y="35">直径为 d 的圆球</text>
+    <text x="441" y="84">接触面</text>
+    <text x="285" y="580">Camera</text>
+    <text x="145" y="432" font-style="italic">x</text>
+    <text x="17" y="455" font-style="italic">y</text>
+    <text x="66" y="323" font-style="italic">z</text>
+    <path d="M480 92L365 193" fill="none" stroke="#c43c39" stroke-width="3.2" marker-end="url(#r)"/>
+    <path d="M75 123L265 186" fill="none" stroke="#298347" stroke-width="3.2" marker-end="url(#g)"/>
+    <path d="M580 320L385 255" fill="none" stroke="#3268af" stroke-width="3.2" marker-end="url(#b)"/>
+    <text x="432" y="402">三色光照射方向</text>
+
+    <text x="714" y="73">想象接触面是一面镜子…</text>
+    <path d="M715 135H1130" fill="none" stroke="#999" stroke-width="1.3" stroke-dasharray="6 6"/>
+    <g stroke="#111" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M715 135C760 230 790 260 840 260C885 260 900 230 940 190C975 155 1005 145 1035 135H1130"/>
+      <path d="M900 230L980 150" stroke-width="1.5"/>
+      <!-- Horizontal incident ray; a 45 degree local tangent reflects it vertically. -->
+      <path d="M1140 190H945" marker-end="url(#a)"/>
+      <path d="M940 190V367" marker-end="url(#a)"/>
+      <path d="M918 381H962L955 401H925Z"/>
+      <rect x="913" y="401" width="56" height="41" rx="2"/>
+    </g>
+    <text x="1050" y="176">入射光</text>
+    <text x="904" y="473">Camera</text>
+  </g>
+</svg>
