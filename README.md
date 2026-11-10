@@ -2,7 +2,7 @@
 
 ## 0. 符号约定
 
-$(r,g,b)$：RGB 图像数组，$(r,g,b)\in{[0,1]}^{3\times H\times W}$
+$(r,g,b)$：RGB 图像数组，$(r,g,b)\in{\[0,1\]}^{3\times H\times W}$
 
 $f$：真实深度，$\hat f$：重建深度，单张均为 $H\times W$（即一张单通道图），单位 mm，向内压入为正；$j=\sqrt{-1}$
 
