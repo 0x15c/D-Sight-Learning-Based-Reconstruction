@@ -42,7 +42,7 @@ $$
 f(x,y)=\begin{cases}
 \sqrt{R^2-\rho^2}-\sqrt{R^2-a^2},&\rho\le a,\\
 0,&\rho>a,
-\end{cases}\qquad 0<a<R.
+\end{cases} \qquad
 $$
 
 圆周深度为 0，中心深度为 $`R-\sqrt{R^2-a^2}`$。这就是 `calibration.py` 采用的球面帽近似；球径 $`d`$ 和像素尺度 $`s`$ 都需实测，接触圆需要完整地落在图像内。
